@@ -4,14 +4,14 @@
   <sub>Cell-Pulse Network Diffusion Model with Schedule-Free Sampling for Noise-Robust Modality Translation</sub>
 </h1>
 <div align="center">
-  <a href="https://github.com/" target="_blank">Anonymous Authors</a>
+ Anonymous Authors
 <span></span>
    <br>
 </div>
 <hr>
 
 <hr>
-<h3 align="center">[<a href="https://arxiv.org/">arXiv</a>]</h3>
+
 
 Official PyTorch implementation of **CPN-Diff**. Experiments demonstrate that our method performs effectively across two medical datasets and two thermal infrared visible light facial datasets.
 
