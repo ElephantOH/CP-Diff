@@ -70,7 +70,7 @@ python train_Model.py \
   --max_epoch 120 \
   --lr 1.5e-4 \
   --input_path ./datasets/BrainTs20 \
-  --checkpoint_path ./checkpoints/brats_1to2_SNN_logs
+  --checkpoint_path ./checkpoints/brats_1to2_CPN_logs
 ```
 
 ### Argument descriptions
@@ -87,7 +87,7 @@ python train_Model.py \
 
 ## 🐧 Training CPN
 
-Run the following command to start tuning.
+Run the following command to start training CPN.
 The predicted images are saved under `/checkpoints/$LOG/generated_samples` directory.
 By default, the script runs on a `single GPU`. 
 
