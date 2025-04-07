@@ -89,13 +89,13 @@ def load_config(parser):
 
     # snn
     parser.add_argument('--snn_batch_size', type=int, default=8)
-    parser.add_argument('--snn_dataset_num', type=int, default=44)
-    parser.add_argument('--snn_sleep_time', type=int, default=10)
+    parser.add_argument('--snn_dataset_num', type=int, default=30)
+    parser.add_argument('--snn_sleep_time', type=int, default=5)
     parser.add_argument('--snn_log_time', type=int, default=500)
     parser.add_argument('--snn_env_step', type=int, default=20000)
     parser.add_argument('--prepare_data_num', type=int, default=20)
     # id : [time_layer, [input_ids], intensity, capacity]
-    parser.add_argument('--snn_name', type=str, default="double_tfw")
+    parser.add_argument('--snn_name', type=str, default="line")
     parser.add_argument('--snn_init_search', action='store_true', default=True)
     parser.add_argument('--snn_line', type=parse_dict, default={0.00: [-1, [0.10], 0.0, 1.0],
                                                                 0.10: [0, [0.20], 0.22793515297599415, 0.992664635181427],
@@ -121,20 +121,43 @@ def load_config(parser):
          1.01: [3, [-1], 1.0082, 0.9154],
          1.02: [3, [-1], 1.0082, 0.9154]})
 
-    parser.add_argument('--snn_line_llvip', type=parse_dict, default={
+    parser.add_argument('--snn_11111_llvip', type=parse_dict, default={
         0.0: [-1, [0.1], 0, 1],
         0.1: [0, [0.2], 0.18554755803061238, 0.9971982687711716],
         0.2: [1, [0.3], 0.22149885224080634, 0.9424884617328644],
         0.3: [2, [1.0], 0.19593817478853817, 0.5349813103675842],
         1.0: [3, [-1], 1, 1]})
 
-    parser.add_argument('--snn_double_llvip', type=parse_dict, default={
+    parser.add_argument('--snn_11112_llvip', type=parse_dict, default={
         0.00: [-1, [0.10], 0, 1],
         0.10: [0, [0.20], 0.18554755803061238, 0.9971982687711716],
         0.20: [1, [0.30], 0.22149885224080634, 0.9424884617328644],
         0.30: [2, [1.00, 1.01], 0.19593817478853817, 0.5349813103675842],
         1.00: [3, [-1], 1, 1],
         1.01: [3, [-1], 1, 1]})
+
+    parser.add_argument('--snn_11123_llvip', type=parse_dict, default={
+        0.00: [-1, [0.10], 0, 1],
+        0.10: [0, [0.20], 0.18554755803061238, 0.9971982687711716],
+        0.20: [1, [0.30, 0.31], 0.22149885224080634, 0.9424884617328644],
+        0.30: [2, [1.00, 1.01, 1.02], 0.19593817478853817, 0.5349813103675842],
+        0.31: [2, [1.00, 1.01, 1.02], 0.19593817478853817, 0.5349813103675842],
+        1.00: [3, [-1], 1, 1],
+        1.01: [3, [-1], 1, 1],
+        1.02: [3, [-1], 1, 1],})
+
+    parser.add_argument('--snn_11234_llvip', type=parse_dict, default={
+        0.00: [-1, [0.10], 0, 1],
+        0.10: [0, [0.20], 0.18554755803061238, 0.9971982687711716],
+        0.20: [1, [0.30, 0.31], 0.22149885224080634, 0.9424884617328644],
+        0.21: [1, [0.30, 0.31], 0.22149885224080634, 0.9424884617328644],
+        0.30: [2, [1.00, 1.01, 1.02, 1.03], 0.19593817478853817, 0.5349813103675842],
+        0.31: [2, [1.00, 1.01, 1.02, 1.03], 0.19593817478853817, 0.5349813103675842],
+        0.32: [2, [1.00, 1.01, 1.02, 1.03], 0.19593817478853817, 0.5349813103675842],
+        1.00: [3, [-1], 1, 1],
+        1.01: [3, [-1], 1, 1],
+        1.02: [3, [-1], 1, 1],
+        1.03: [3, [-1], 1, 1],})
 
     parser.add_argument('--snn_double_brats1to2', type=parse_dict, default={
         0.0: [-1, [0.1], 0.0009, 1.0001],
