@@ -139,13 +139,6 @@ Refer to the testing section above to perform inference with the checkpoints. PS
 
 The paper is currently undergoing blind review.
 
-| Dataset | Task      | PSNR         | SSIM         | MAE           | Checkpoint                   |
-|---------|-----------|--------------|--------------|---------------|------------------------------|
-| BRATS   | T1→T2     | 25.53 ± 2.08 | 91.92 ± 1.73 | 0.0275 ± 4.68 | -                            |
-| BRATS   | T2→T1     | 24.52 ± 1.82 | 92.38 ± 1.16 | 0.0313 ± 4.09 | -                            |
-| OASIS3  | T1→T2     | 23.05 ± 6.49 | 80.52 ± 5.84 | 0.0298 ± 9.82 | -                            |
-| OASIS3  | T2→T1     | 23.59 ± 6.12 | 82.10 ± 4.63 | 0.0310 ± 1.01 | -                            |
-| TFW     | VIS.→THE. | 21.08 ± 3.73 | 77.86 ± 2.63 | 0.0515 ± 1.80 | -                            |
 
 
 
