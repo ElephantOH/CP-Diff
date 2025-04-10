@@ -9,7 +9,7 @@ import os
 import numpy as np
 from datetime import datetime
 
-from backbones.cpn_replayer import ReplayBuffer
+from backbones.mpcg_replayer import ReplayBuffer
 
 
 def extract(num, shape, device):
@@ -51,7 +51,7 @@ def topological_sort(graph):
             dfs(node)
     return stack
 
-def get_cell_inputs(args, cell_input, cpn_result, source, device):
+def get_cell_inputs(args, cell_input, mpcg_result, source, device):
     inputs_x0 = []
     inputs_xt = []
     xt_noise = torch.randn_like(source).to(device)
@@ -62,7 +62,7 @@ def get_cell_inputs(args, cell_input, cpn_result, source, device):
             inputs_x0.append(source)
             inputs_xt.append(xt_noise)
         else:
-            inputs_group = cpn_result.get(input_id)
+            inputs_group = mpcg_result.get(input_id)
             if inputs_group is None:
                 inputs_x0.append(source)
                 inputs_xt.append(xt_noise)
@@ -87,15 +87,15 @@ def get_cell_pulses(x_0, x_t, intensity, capacity, pulses_type, device):
            + extract(intensity * capacity, x_0.shape, device) * x_t)
     return h_t
 
-def sample_by_cpn(args, cpn, model, source, device):
-    sample_sequence = topological_sort(cpn)
-    cpn_result = {key: None for key in cpn}
+def sample_by_mpcg(args, mpcg, model, source, device):
+    sample_sequence = topological_sort(mpcg)
+    mpcg_result = {key: None for key in mpcg}
     with torch.no_grad():
-        for cpn_id in sample_sequence:
-            cell_info = cpn[cpn_id] # id : [time_layer, [input_ids], pulses, capacity]
-            input_x0, input_xt = get_cell_inputs(args, cell_info[1], cpn_result, source, device)
-            if cpn_id == 0.0:
-                cpn_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
+        for mpcg_id in sample_sequence:
+            cell_info = mpcg[mpcg_id] # id : [time_layer, [input_ids], pulses, capacity]
+            input_x0, input_xt = get_cell_inputs(args, cell_info[1], mpcg_result, source, device)
+            if mpcg_id == 0.0:
+                mpcg_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
                 continue
             cell_time = torch.full((input_x0.size(0),), cell_info[0], dtype=torch.int64).to(device)
             cell_latent = torch.randn(input_x0.size(0), args.z_emb_dim, device=device)
@@ -104,8 +104,8 @@ def sample_by_cpn(args, cpn, model, source, device):
             h_t = get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device)
             output_x0, _ = model(torch.cat((h_t, source),axis=1), cell_time, cell_latent)
             output_xt = h_t
-            cpn_result[cpn_id] = [output_x0, output_xt]
-    result = cpn_result.get(0.0)
+            mpcg_result[mpcg_id] = [output_x0, output_xt]
+    result = mpcg_result.get(0.0)
     if result is None:
         assert "[Error]: The result is None. "
     return result[0]
@@ -139,34 +139,34 @@ def evaluate_samples(args, real_data, fake_sample):
         mae_list.append(mae_val)
     return psnr_list, ssim_list, mae_list
 
-def cpn_to_tensor(cpn, dtype=torch.float64, device=torch.device("cuda:0")):
+def mpcg_to_tensor(mpcg, dtype=torch.float64, device=torch.device("cuda:0")):
     pulses = []
     capacity = []
-    for key in sorted(cpn.keys()):
+    for key in sorted(mpcg.keys()):
         if key >= 1.0 or key <= 0.0:
             continue
-        values = cpn[key]
+        values = mpcg[key]
         pulses.append(values[2])
         capacity.append(values[3])
     all_tensors = torch.tensor(pulses+capacity, dtype=dtype).to(device)
     return all_tensors
 
-def tensor_to_cpn(cpn, tensor):
+def tensor_to_mpcg(mpcg, tensor):
     all_lists = tensor.cpu().detach().tolist()
     mid = len(all_lists) // 2
 
     pulses = all_lists[:mid]
     capacity = all_lists[mid:]
     count = 0
-    for key in sorted(cpn.keys()):
+    for key in sorted(mpcg.keys()):
         if key >= 1.0 or key <= 0.0:
             continue
-        cpn[key][2] = pulses[count]
-        cpn[key][3] = capacity[count]
+        mpcg[key][2] = pulses[count]
+        mpcg[key][3] = capacity[count]
         count += 1
-    return cpn
+    return mpcg
 
-def sample_one(args, dataloader, model, cpn, device):
+def sample_one(args, dataloader, model, mpcg, device):
     PSNR = []
     SSIM = []
     MAE = []
@@ -177,7 +177,7 @@ def sample_one(args, dataloader, model, cpn, device):
             if args.input_channels == 3:
                 target_data = target_data.squeeze(1)
                 source_data = source_data.squeeze(1)
-            fake_sample = sample_by_cpn(args, cpn, model, source_data, device)
+            fake_sample = sample_by_mpcg(args, mpcg, model, source_data, device)
             psnr_list, ssim_list, mae_list = evaluate_samples(args, target_data, fake_sample)
             PSNR.extend(psnr_list)
             SSIM.extend(ssim_list)
@@ -185,23 +185,23 @@ def sample_one(args, dataloader, model, cpn, device):
     vv = sum(PSNR) / len(PSNR) + 30 * sum(SSIM) / len(SSIM)
     return vv
 
-def print_cpn(cpn):
-    cpn = "{" + ',\n'.join([f'{key}: {value}' for key, value in cpn.items()]) + "}"
-    print("\033[93m" + str(cpn) + "\033[0m")
+def print_mpcg(mpcg):
+    mpcg = "{" + ',\n'.join([f'{key}: {value}' for key, value in mpcg.items()]) + "}"
+    print("\033[93m" + str(mpcg) + "\033[0m")
 
-class CPNACSearcher:
-    def __init__(self, args, cpn=None, model=None, dataloader=None, device=torch.device('cuda:0')):
+class MPCGACSearcher:
+    def __init__(self, args, mpcg=None, model=None, dataloader=None, device=torch.device('cuda:0')):
         self.args = args
         self.device = device
         self.dtype = torch.float64
-        self.cpn = cpn
+        self.mpcg = mpcg
         self.model = model
         self.dataloader = dataloader
         self.buffer = None
         self.opt_state = None
-        self.opt_cpn = None
+        self.opt_mpcg = None
         self.change_global_noise()
-        self.org_v = sample_one(self.args, self.dataloader, self.model, self.cpn, self.device)
+        self.org_v = sample_one(self.args, self.dataloader, self.model, self.mpcg, self.device)
         self.opt_v = self.org_v
 
     def change_global_noise(self):
@@ -213,48 +213,48 @@ class CPNACSearcher:
         self.buffer = ReplayBuffer(sample_capacity, max_capacity)
         return self.buffer
 
-    def change_cpn_layer(self, cpn, key, item, value):
-        for k in sorted(cpn.keys()):
+    def change_mpcg_layer(self, mpcg, key, item, value):
+        for k in sorted(mpcg.keys()):
             if round(key, 1) <= k < round(key + 0.1, 1):
-                cpn[k][item] = round(value, 4)
-        return cpn
+                mpcg[k][item] = round(value, 4)
+        return mpcg
 
     def ternary_search_layer_in_range(self, key, item, item_min=-0.5, item_max=3., eps=5e-3):
         start_time = time.time()
         left = item_min
         right = item_max
-        best_cpn = self.cpn
-        best_v = sample_one(self.args, self.dataloader, self.model, best_cpn, self.device)
+        best_mpcg = self.mpcg
+        best_v = sample_one(self.args, self.dataloader, self.model, best_mpcg, self.device)
         results = []
         items = []
 
-        def sample_and_restore_data(cpn, key, item, new_value):
-            new_cpn = self.change_cpn_layer(cpn, key, item, new_value)
-            new_v = sample_one(self.args, self.dataloader, self.model, new_cpn, self.device)
+        def sample_and_restore_data(mpcg, key, item, new_value):
+            new_mpcg = self.change_mpcg_layer(mpcg, key, item, new_value)
+            new_v = sample_one(self.args, self.dataloader, self.model, new_mpcg, self.device)
             results.append(new_v)
             items.append(new_value)
-            cpn_tensors = cpn_to_tensor(cpn=new_cpn, device=self.device)
-            self.buffer.push(cpn_tensors, new_v)
+            mpcg_tensors = mpcg_to_tensor(mpcg=new_mpcg, device=self.device)
+            self.buffer.push(mpcg_tensors, new_v)
             return new_v
 
         while right - left > eps:
-            tmp_cpn = best_cpn
+            tmp_mpcg = best_mpcg
             mid1 = left + (right - left) / 3
             mid2 = right - (right - left) / 3
-            mid1_v = sample_and_restore_data(tmp_cpn, key, item, mid1)
-            mid2_v = sample_and_restore_data(tmp_cpn, key, item, mid2)
+            mid1_v = sample_and_restore_data(tmp_mpcg, key, item, mid1)
+            mid2_v = sample_and_restore_data(tmp_mpcg, key, item, mid2)
             if mid1_v < mid2_v:
                 left = mid1
             else:
                 right = mid2
         best_item = (left + right) / 2.
-        tmp_cpn = self.change_cpn_layer(best_cpn, key, item, best_item)
-        tmp_v = sample_one(self.args, self.dataloader, self.model, tmp_cpn, self.device)
+        tmp_mpcg = self.change_mpcg_layer(best_mpcg, key, item, best_item)
+        tmp_v = sample_one(self.args, self.dataloader, self.model, tmp_mpcg, self.device)
         if tmp_v < best_v:
-            best_cpn = self.cpn
-            best_item = self.cpn[key][item]
+            best_mpcg = self.mpcg
+            best_item = self.mpcg[key][item]
         else:
-            best_cpn = tmp_cpn
+            best_mpcg = tmp_mpcg
             best_v = tmp_v
 
         end_time = time.time()
@@ -262,41 +262,41 @@ class CPNACSearcher:
         print("[Searcher]: Find the key:{}, index:{}, buffer_size:{}, best_item:{:.4f}, org_v:{:.4f}, best_v:{:.4f}, times:{:.2f} minutes".format(
             key, item, self.buffer.size(), best_item, self.org_v, best_v, elapsed_time / 60
         ))
-        return best_cpn, best_v, results, items
+        return best_mpcg, best_v, results, items
 
-    def ternary_search_init_cpn(self, search_round=2):
-        cpn_tensors = cpn_to_tensor(cpn=self.cpn, device=self.device)
-        v = sample_one(self.args, self.dataloader, self.model, self.cpn, self.device)
+    def ternary_search_init_mpcg(self, search_round=2):
+        mpcg_tensors = mpcg_to_tensor(mpcg=self.mpcg, device=self.device)
+        v = sample_one(self.args, self.dataloader, self.model, self.mpcg, self.device)
         self.org_v = v
-        self.buffer.push(cpn_tensors, v)
+        self.buffer.push(mpcg_tensors, v)
         search_low = -0.5
         search_high = 3.
         for r in range(search_round):
             for n in range(10, -1, -1):
                 lower = n / 10.0
                 upper = round(lower + 0.1, 1)
-                for key in self.cpn:
+                for key in self.mpcg:
                     if int(key * 100) % 10 != 0:
                         continue
                     if lower <= key < upper:
                         if r != 0:
-                            search_low = self.cpn[float(round(lower, 2))][2] - 0.3
-                            search_high = self.cpn[float(round(lower, 2))][2] + 0.3
-                        best_cpn, best_v, rst, itm = self.ternary_search_layer_in_range(float(round(lower, 2)), 2, search_low, search_high)
-                        self.cpn = best_cpn
-                        self.draw_result(itm, rst, "cpn_intensity_at_{:.2f}".format(lower), "intensity")
+                            search_low = self.mpcg[float(round(lower, 2))][2] - 0.3
+                            search_high = self.mpcg[float(round(lower, 2))][2] + 0.3
+                        best_mpcg, best_v, rst, itm = self.ternary_search_layer_in_range(float(round(lower, 2)), 2, search_low, search_high)
+                        self.mpcg = best_mpcg
+                        self.draw_result(itm, rst, "mpcg_intensity_at_{:.2f}".format(lower), "intensity")
 
                         if r != 0:
-                            search_low = self.cpn[float(round(lower, 2))][3] - 0.3
-                            search_high = self.cpn[float(round(lower, 2))][3] + 0.3
-                        best_cpn, best_v, rst, itm = self.ternary_search_layer_in_range(float(round(lower, 2)), 3, search_low, search_high)
-                        self.cpn = best_cpn
-                        self.draw_result(itm, rst, "cpn_capacity_at_{:.2f}".format(lower), "capacity")
+                            search_low = self.mpcg[float(round(lower, 2))][3] - 0.3
+                            search_high = self.mpcg[float(round(lower, 2))][3] + 0.3
+                        best_mpcg, best_v, rst, itm = self.ternary_search_layer_in_range(float(round(lower, 2)), 3, search_low, search_high)
+                        self.mpcg = best_mpcg
+                        self.draw_result(itm, rst, "mpcg_capacity_at_{:.2f}".format(lower), "capacity")
 
-            print("Init CPN:\n")
-            self.opt_cpn = self.cpn
-            print_cpn(self.cpn)
-        return self.cpn
+            print("Init MPCG:\n")
+            self.opt_mpcg = self.mpcg
+            print_mpcg(self.mpcg)
+        return self.mpcg
 
     def draw_result(self, items, results, title_name, item_name, plots_path="plot"):
         os.makedirs(plots_path, exist_ok=True)
@@ -329,39 +329,39 @@ class CPNACSearcher:
 
 
     def prepare_data(self, data_size=100):
-        cpn_tensors = cpn_to_tensor(cpn=self.cpn, device=self.device)
-        n_v = sample_one(self.args, self.dataloader, self.model, self.cpn, self.device)
+        mpcg_tensors = mpcg_to_tensor(mpcg=self.mpcg, device=self.device)
+        n_v = sample_one(self.args, self.dataloader, self.model, self.mpcg, self.device)
         self.org_v = n_v
-        self.buffer.push(cpn_tensors, n_v)
+        self.buffer.push(mpcg_tensors, n_v)
         for _ in tqdm(range(data_size), desc="Preparing data..."):
             states, vs = self.buffer.sample_elite(1)
-            cpn_tensors = states[0] + torch.normal(0.0, 0.08, size=states[0].size(), device=self.device)
-            cpn_tensors = torch.clamp(cpn_tensors, 0.0, 1.5)
-            cpn_noise = tensor_to_cpn(self.cpn, cpn_tensors)
-            n_v = sample_one(self.args, self.dataloader, self.model, cpn_noise, self.device)
+            mpcg_tensors = states[0] + torch.normal(0.0, 0.08, size=states[0].size(), device=self.device)
+            mpcg_tensors = torch.clamp(mpcg_tensors, 0.0, 1.5)
+            mpcg_noise = tensor_to_mpcg(self.mpcg, mpcg_tensors)
+            n_v = sample_one(self.args, self.dataloader, self.model, mpcg_noise, self.device)
             if n_v > self.opt_v:
                 self.opt_v = n_v
-                self.opt_cpn = cpn_noise
-                self.opt_state = cpn_tensors
-            self.buffer.push(cpn_tensors, n_v)
+                self.opt_mpcg = mpcg_noise
+                self.opt_state = mpcg_tensors
+            self.buffer.push(mpcg_tensors, n_v)
 
-    def synchronize_load_data(self, args, cpn, dataloader, model, data_size, device):
+    def synchronize_load_data(self, args, mpcg, dataloader, model, data_size, device):
         for _ in range(data_size):
             states, vs = self.buffer.sample_elite(1)
-            cpn_tensors = states[0] + torch.normal(0.0, 0.05, size=states[0].size(), device=device)
-            cpn_tensors = torch.clamp(cpn_tensors, 0.0, 1.0)
-            cpn_noise = tensor_to_cpn(cpn, cpn_tensors)
-            v = sample_one(args, dataloader, model, cpn_noise, device)
+            mpcg_tensors = states[0] + torch.normal(0.0, 0.05, size=states[0].size(), device=device)
+            mpcg_tensors = torch.clamp(mpcg_tensors, 0.0, 1.0)
+            mpcg_noise = tensor_to_mpcg(mpcg, mpcg_tensors)
+            v = sample_one(args, dataloader, model, mpcg_noise, device)
             if v > self.opt_v:
                 self.opt_v = v
-                self.opt_cpn = cpn_noise
-                self.opt_state = cpn_tensors
-            self.buffer.push(cpn_tensors, v)
+                self.opt_mpcg = mpcg_noise
+                self.opt_state = mpcg_tensors
+            self.buffer.push(mpcg_tensors, v)
 
     def start_synchronize_load_data_in_background(self, data_size=14000):
         try:
             thread = threading.Thread(target=self.synchronize_load_data,
-                                      args=(self.args, self.cpn, self.dataloader, self.model, data_size, self.device))
+                                      args=(self.args, self.mpcg, self.dataloader, self.model, data_size, self.device))
             thread.daemon = True
             thread.start()
         except Exception as e:
