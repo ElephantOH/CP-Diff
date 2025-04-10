@@ -73,16 +73,16 @@ def evaluate_samples(real_data, fake_sample):
         mae_list.append(mae_val)
     return psnr_list, ssim_list, mae_list
 
-def get_cpn_dim(cpn):
-    cpn_dim = 0
+def get_mpcg_dim(mpcg):
+    mpcg_dim = 0
     hidden_dim = 256
-    for key in sorted(cpn.keys()):
+    for key in sorted(mpcg.keys()):
         if key >= 1.0 or key <= 0.0:
             continue
-        cpn_dim += 2
-    if cpn_dim > 12:
+        mpcg_dim += 2
+    if mpcg_dim > 12:
         hidden_dim = 384
-    return cpn_dim, hidden_dim
+    return mpcg_dim, hidden_dim
 
 def topological_sort(graph):
     visited = set()
@@ -102,7 +102,7 @@ def topological_sort(graph):
             dfs(node)
     return stack
 
-def get_cell_inputs(cell_input, cpn_result, source, device):
+def get_cell_inputs(cell_input, mpcg_result, source, device):
     inputs_x0 = []
     inputs_xt = []
     xt_noise = torch.randn_like(source).to(device)
@@ -115,7 +115,7 @@ def get_cell_inputs(cell_input, cpn_result, source, device):
             inputs_x0.append(source)
             inputs_xt.append(xt_noise)
         else:
-            inputs_group = cpn_result.get(input_id)
+            inputs_group = mpcg_result.get(input_id)
             if inputs_group is None:
                 inputs_x0.append(source)
                 inputs_xt.append(xt_noise)
@@ -143,15 +143,15 @@ def get_cell_pulses(x_0, x_t, intensity, capacity, pulses_type, device):
            + extract(intensity * capacity, x_0.shape, device) * x_t)
     return h_t
 
-def sample_by_cpn(cpn, model, source, device):
-    sample_sequence = topological_sort(cpn)
-    cpn_result = {key: None for key in cpn}
+def sample_by_mpcg(mpcg, model, source, device):
+    sample_sequence = topological_sort(mpcg)
+    mpcg_result = {key: None for key in mpcg}
     with torch.no_grad():
-        for cpn_id in sample_sequence:
-            cell_info = cpn[cpn_id] # id : [time_layer, [input_ids], intensity, capacity]
-            input_x0, input_xt = get_cell_inputs(cell_info[1], cpn_result, source, device)
-            if cpn_id == 0.0:
-                cpn_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
+        for mpcg_id in sample_sequence:
+            cell_info = mpcg[mpcg_id] # id : [time_layer, [input_ids], intensity, capacity]
+            input_x0, input_xt = get_cell_inputs(cell_info[1], mpcg_result, source, device)
+            if mpcg_id == 0.0:
+                mpcg_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
                 continue
             cell_time = torch.full((input_x0.size(0),), cell_info[0], dtype=torch.int64).to(device)
             cell_latent = torch.randn(input_x0.size(0), args.z_emb_dim, device=device)
@@ -160,13 +160,13 @@ def sample_by_cpn(cpn, model, source, device):
             h_t = get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device)
             output_x0, _ = model(torch.cat((h_t, source),axis=1), cell_time, cell_latent)
             output_xt = h_t
-            cpn_result[cpn_id] = [output_x0, output_xt]
-    result = cpn_result.get(0.0)
+            mpcg_result[mpcg_id] = [output_x0, output_xt]
+    result = mpcg_result.get(0.0)
     if result is None:
         assert "[Error]: The result is None. "
     return result[0]
 
-def sample_one(dataloader, model, cpn, device):
+def sample_one(dataloader, model, mpcg, device):
     PSNR = []
     SSIM = []
     MAE = []
@@ -178,7 +178,7 @@ def sample_one(dataloader, model, cpn, device):
             if args.input_channels == 3:
                 target_data = target_data.squeeze(1)
                 source_data = source_data.squeeze(1)
-            fake_sample = sample_by_cpn(cpn, model, source_data, device)
+            fake_sample = sample_by_mpcg(mpcg, model, source_data, device)
             psnr_list, ssim_list, mae_list = evaluate_samples(target_data, fake_sample)
             PSNR.extend(psnr_list)
             SSIM.extend(ssim_list)
@@ -188,7 +188,7 @@ def sample_one(dataloader, model, cpn, device):
     vv = sum(PSNR) / len(PSNR) + 30 * sum(SSIM) / len(SSIM)
     return vv
 
-def sample_only_one(dataloader, model, cpn, times, device):
+def sample_only_one(dataloader, model, mpcg, times, device):
     PSNR = []
     SSIM = []
     MAE = []
@@ -203,7 +203,7 @@ def sample_only_one(dataloader, model, cpn, times, device):
                 if args.input_channels == 3:
                     target_data = target_data.squeeze(1)
                     source_data = source_data.squeeze(1)
-                fake_sample = sample_by_cpn(cpn, model, source_data, device)
+                fake_sample = sample_by_mpcg(mpcg, model, source_data, device)
                 psnr_list, ssim_list, mae_list = evaluate_samples(target_data, fake_sample)
                 PSNR.append(psnr_list[0])
                 SSIM.append(ssim_list[0])
@@ -224,43 +224,43 @@ def sample_only_one(dataloader, model, cpn, times, device):
 
     return PSNR, SSIM, MAE
 
-def refresh_cell_dependent(cpn):
-    for key, value in cpn.items():
+def refresh_cell_dependent(mpcg):
+    for key, value in mpcg.items():
         if round(key, 2) >= 1.0:
             continue
 
         layer = round(int(key * 10) / 10, 2)
         dep = []
         dep_count = 0
-        for key1, value1 in cpn.items():
+        for key1, value1 in mpcg.items():
             if round(layer + 0.1 , 2) <= key1 and round(layer + 0.2 , 2) > key1:
                 dep.append(key1)
                 dep_count += 1
 
         if dep_count == 0:
-            for key1, value1 in cpn.items():
+            for key1, value1 in mpcg.items():
                 if round(1.00, 2) <= key1:
                     dep.append(key1)
                     dep_count += 1
 
-        cpn[key][1] = dep
-    return cpn
+        mpcg[key][1] = dep
+    return mpcg
 
-def modify_cell_by_copy(cpn, layer_id, op_id):
+def modify_cell_by_copy(mpcg, layer_id, op_id):
     if op_id == 1:
         original_key = layer_id
-        if original_key not in cpn:
+        if original_key not in mpcg:
             print("[warning]: key not found!")
-            return cpn
+            return mpcg
         new_key = round(original_key + 0.01, 2)
-        while new_key in cpn:
+        while new_key in mpcg:
             new_key = round(new_key + 0.01, 2)
-        cpn[new_key] = copy.deepcopy(cpn[original_key])
+        mpcg[new_key] = copy.deepcopy(mpcg[original_key])
     elif op_id == -1:
         original_key = layer_id
         upper = round(original_key + 0.1, 2)
         candidates = []
-        for k in cpn:
+        for k in mpcg:
             if original_key < k < upper:
                 k_rounded = round(k, 2)
                 second_decimal = int(round(k_rounded * 100)) % 10
@@ -268,13 +268,13 @@ def modify_cell_by_copy(cpn, layer_id, op_id):
                     candidates.append(k)
         if candidates:
             max_key = max(candidates)
-            del cpn[max_key]
+            del mpcg[max_key]
     else:
-        return cpn
-    return cpn
+        return mpcg
+    return mpcg
 
-def modify_cell_by_layer(cpn, layer_num=[1, 1, 1, 1, 1], max_layer_num=5):
-    modify_cpn = copy.deepcopy(cpn)
+def modify_cell_by_layer(mpcg, layer_num=[1, 1, 1, 1, 1], max_layer_num=5):
+    modify_mpcg = copy.deepcopy(mpcg)
     for i in range(len(layer_num)):
         if layer_num[i] < 1 or layer_num[i] > max_layer_num or i == 0:
             continue
@@ -284,49 +284,49 @@ def modify_cell_by_layer(cpn, layer_num=[1, 1, 1, 1, 1], max_layer_num=5):
             else:
                 layer_id = round(i / 10, 2)
             for j in range(layer_num[i]-1):
-                modify_cpn = modify_cell_by_copy(modify_cpn, layer_id, 1)
-    modify_cpn = refresh_cell_dependent(modify_cpn)
-    return modify_cpn
+                modify_mpcg = modify_cell_by_copy(modify_mpcg, layer_id, 1)
+    modify_mpcg = refresh_cell_dependent(modify_mpcg)
+    return modify_mpcg
 
 
 #%% MAIN FUNCTION
-def train_cpn(args):
+def train_mpcg(args):
     torch.manual_seed(42)
     torch.cuda.set_device(args.gpu_chose)
     device = torch.device('cuda:{}'.format(args.gpu_chose))
-    args.phase = "train_cpn"
+    args.phase = "train_mpcg"
     args.sample_fixed = True
     train_dataset = GetDataset(args.phase, args.input_path, args.source, args.target, dim=args.input_channels, normed=args.normed)
-    cpn_dataset_indices = np.random.choice(len(train_dataset), args.cpn_dataset_num, replace=False)
-    cpn_dataset = Subset(train_dataset, cpn_dataset_indices)
-    cpn_dataloader = torch.utils.data.DataLoader(cpn_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    mpcg_dataset_indices = np.random.choice(len(train_dataset), args.mpcg_dataset_num, replace=False)
+    mpcg_dataset = Subset(train_dataset, mpcg_dataset_indices)
+    mpcg_dataloader = torch.utils.data.DataLoader(mpcg_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     if args.use_model_name == "dfm":
         model = DoubleFlowModel(args).to(device)
     else:
         model = NCSNpp(args).to(device)
 
-    cpn_name = "cpn_" + args.cpn_name
-    cpn = getattr(args, cpn_name)
+    mpcg_name = "mpcg_" + args.mpcg_name
+    mpcg = getattr(args, mpcg_name)
 
     args.use_model_name = "DFM"
     checkpoint_file = args.checkpoint_path + "/{}_{}.pth"
     load_checkpoint(checkpoint_file, model, '{}_{}'.format(args.network_type, args.use_model_name), epoch=str(args.which_epoch), device=device)
 
-    # get_nr(cpn_dataloader, model, 500, device)
+    # get_nr(mpcg_dataloader, model, 500, device)
     # exit(0)
-    # get_ablation_on_cpn_framework(cpn_dataloader, model, cpn)
+    # get_ablation_on_mpcg_framework(mpcg_dataloader, model, mpcg)
     # exit(0)
-    # get_photo(cpn_dataloader, model, 1000, device)
+    # get_photo(mpcg_dataloader, model, 1000, device)
     # exit(0)
     #######################################################
-    from backbones.cpn_actor_critic import CPNACTrainer
-    cpn_dim, hidden_dim = get_cpn_dim(cpn)
-    cpnac = CPNACTrainer(args, cpn_dim=cpn_dim, hidden_dim=hidden_dim, env_step=args.cpn_env_step,
-                         cpn=cpn, model=model, dataloader=cpn_dataloader, device=device,
-                         cpn_lr=1e-4, cpn_lrf=1e-5, batch_size=args.cpn_batch_size)
-    cpnac.train()
-    a_cpn, a_v, t_cpn, t_v = cpnac.get_result()
+    from backbones.mpcg_actor_critic import mpcgACTrainer
+    mpcg_dim, hidden_dim = get_mpcg_dim(mpcg)
+    mpcgac = mpcgACTrainer(args, mpcg_dim=mpcg_dim, hidden_dim=hidden_dim, env_step=args.mpcg_env_step,
+                         mpcg=mpcg, model=model, dataloader=mpcg_dataloader, device=device,
+                         mpcg_lr=1e-4, mpcg_lrf=1e-5, batch_size=args.mpcg_batch_size)
+    mpcgac.train()
+    a_mpcg, a_v, t_mpcg, t_v = mpcgac.get_result()
     #######################################################
 
 
@@ -349,5 +349,5 @@ if __name__ == '__main__':
     else:
         print(f"Unknown network type: {args.network_type}")
     
-    train_cpn(args)
+    train_mpcg(args)
     
