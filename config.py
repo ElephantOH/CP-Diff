@@ -29,7 +29,7 @@ def load_config(parser):
     parser.add_argument('--skip_rescale', action='store_false', default=True, help='skip rescale')
     parser.add_argument('--resblock_type', default='biggan', help='type of resnet block, choice in biggan and ddpm')
     parser.add_argument('--use_tanh_final', action='store_false', default=True)
-    parser.add_argument('--phase', type=str, default='train_cell', help='model train_cell, train_snn or test_snn')
+    parser.add_argument('--phase', type=str, default='train_cell', help='model train_cell, train_cpn or test_cpn')
     parser.add_argument('--output_complete', action='store_true', default=True)
     parser.add_argument('--use_multi_flow', action='store_true', default=True)
     parser.add_argument('--driving_flow', type=float, default=0.0)
@@ -88,17 +88,17 @@ def load_config(parser):
     parser.add_argument('--train_zeta', nargs='+', type=float, default=[0.0, 0.12, 0.43, 0.86, 1.00])
     parser.add_argument('--pulses_type', type=str, default='xt_pulses', help='noise_pulses or xt_pulses')
 
-    # snn
-    parser.add_argument('--snn_batch_size', type=int, default=8)
-    parser.add_argument('--snn_dataset_num', type=int, default=30)
-    parser.add_argument('--snn_sleep_time', type=int, default=5)
-    parser.add_argument('--snn_log_time', type=int, default=500)
-    parser.add_argument('--snn_env_step', type=int, default=20000)
+    # cpn
+    parser.add_argument('--cpn_batch_size', type=int, default=8)
+    parser.add_argument('--cpn_dataset_num', type=int, default=30)
+    parser.add_argument('--cpn_sleep_time', type=int, default=5)
+    parser.add_argument('--cpn_log_time', type=int, default=500)
+    parser.add_argument('--cpn_env_step', type=int, default=20000)
     parser.add_argument('--prepare_data_num', type=int, default=20)
     # id : [time_layer, [input_ids], intensity, capacity]
-    parser.add_argument('--snn_name', type=str, default="line")
-    parser.add_argument('--snn_init_search', action='store_true', default=True)
-    parser.add_argument('--snn_line', type=parse_dict, default={
+    parser.add_argument('--cpn_name', type=str, default="line")
+    parser.add_argument('--cpn_init_search', action='store_true', default=True)
+    parser.add_argument('--cpn_line', type=parse_dict, default={
         0.00: [-1, [0.10], 0.0, 1.0],
         0.10: [0, [0.20], 0.22793515297599415, 0.992664635181427],
         0.20: [1, [0.30], 0.28139371247105704, 0.90867680311203],
@@ -106,7 +106,7 @@ def load_config(parser):
         1.00: [3, [-1], 1.0, 1.0],
         })
 
-    parser.add_argument('--snn_vp', type=parse_dict, default={
+    parser.add_argument('--cpn_vp', type=parse_dict, default={
         0.00: [-1, [0.10], 0.0, 1.0],
         0.10: [0, [0.20], 0.2016, 0.8674],
         0.20: [1, [0.30], 0.1930, 0.4622],
@@ -114,7 +114,7 @@ def load_config(parser):
         1.00: [3, [-1], 1.0, 1.0],
     })
 
-    parser.add_argument('--snn_double_tfw', type=parse_dict, default={
+    parser.add_argument('--cpn_double_tfw', type=parse_dict, default={
          0.0: [-1, [0.1], 0.0227, 1.0094],
          0.1: [0, [0.2], 0.4056, 0.9521],
          0.2: [1, [0.3, 0.31], 0.1752, 0.8791],
