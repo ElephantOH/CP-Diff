@@ -31,7 +31,7 @@ conda activate cp
 ## 🐼 Prepare dataset
 The default data set class GetDataset requires a specific folder structure for organizing the data set.
 Modalities (such as `T1, T2, etc.`) should be stored in separate folders, while splits `(train, test, and optionally val)` should be arranged as subfolders containing `2D` images named `slice_0.png or .npy, slice_1.png or .npy`, and so on.
-To utilize your custom data set class, implement your version in `dataset.py` by inheriting from the `SNNDataset` class.
+To utilize your custom data set class, implement your version in `dataset.py` by inheriting from the `CPDataset` class.
 
 ```
 <datasets>/
