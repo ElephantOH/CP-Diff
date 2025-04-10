@@ -1,5 +1,5 @@
 import torch
-from .cpn_searcher import CPNACSearcher
+from .mpcg_searcher import MPCGACSearcher
 from torch import nn, optim
 import numpy as np
 
@@ -104,7 +104,7 @@ class Critic(nn.Module):
         return output_value
 
 
-#%% CPNAC
+#%% MPCGAC
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 from tqdm import tqdm
@@ -148,7 +148,7 @@ def topological_sort(graph):
             dfs(node)
     return stack
 
-def get_cell_inputs(args, cell_input, cpn_result, source, device):
+def get_cell_inputs(args, cell_input, mpcg_result, source, device):
     inputs_x0 = []
     inputs_xt = []
     xt_noise = torch.randn_like(source).to(device)
@@ -159,7 +159,7 @@ def get_cell_inputs(args, cell_input, cpn_result, source, device):
             inputs_x0.append(source)
             inputs_xt.append(xt_noise)
         else:
-            inputs_group = cpn_result.get(input_id)
+            inputs_group = mpcg_result.get(input_id)
             if inputs_group is None:
                 inputs_x0.append(source)
                 inputs_xt.append(xt_noise)
@@ -184,15 +184,15 @@ def get_cell_pulses(x_0, x_t, intensity, capacity, pulses_type, device):
            + extract(intensity * capacity, x_0.shape, device) * x_t)
     return h_t
 
-def sample_by_cpn(args, cpn, model, source, device):
-    sample_sequence = topological_sort(cpn)
-    cpn_result = {key: None for key in cpn}
+def sample_by_mpcg(args, mpcg, model, source, device):
+    sample_sequence = topological_sort(mpcg)
+    mpcg_result = {key: None for key in mpcg}
     with torch.no_grad():
-        for cpn_id in sample_sequence:
-            cell_info = cpn[cpn_id] # id : [time_layer, [input_ids], pulses, capacity]
-            input_x0, input_xt = get_cell_inputs(args, cell_info[1], cpn_result, source, device)
-            if cpn_id == 0.0:
-                cpn_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
+        for mpcg_id in sample_sequence:
+            cell_info = mpcg[mpcg_id] # id : [time_layer, [input_ids], pulses, capacity]
+            input_x0, input_xt = get_cell_inputs(args, cell_info[1], mpcg_result, source, device)
+            if mpcg_id == 0.0:
+                mpcg_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
                 continue
             cell_time = torch.full((input_x0.size(0),), cell_info[0], dtype=torch.int64).to(device)
             cell_latent = torch.randn(input_x0.size(0), args.z_emb_dim, device=device)
@@ -201,8 +201,8 @@ def sample_by_cpn(args, cpn, model, source, device):
             h_t = get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device)
             output_x0, _ = model(torch.cat((h_t, source),axis=1), cell_time, cell_latent)
             output_xt = h_t
-            cpn_result[cpn_id] = [output_x0, output_xt]
-    result = cpn_result.get(0.0)
+            mpcg_result[mpcg_id] = [output_x0, output_xt]
+    result = mpcg_result.get(0.0)
     if result is None:
         assert "[Error]: The result is None. "
     return result[0]
@@ -236,35 +236,35 @@ def evaluate_samples(args, real_data, fake_sample):
         mae_list.append(mae_val)
     return psnr_list, ssim_list, mae_list
 
-def cpn_to_tensor(cpn, dtype=torch.float64, device=torch.device("cuda:0")):
+def mpcg_to_tensor(mpcg, dtype=torch.float64, device=torch.device("cuda:0")):
     pulses = []
     capacity = []
-    for key in sorted(cpn.keys()):
+    for key in sorted(mpcg.keys()):
         if key >= 1.0 or key <= 0.0:
             continue
-        values = cpn[key]
+        values = mpcg[key]
         pulses.append(values[2])
         capacity.append(values[3])
     all_tensors = torch.tensor(pulses+capacity, dtype=dtype).to(device)
     return all_tensors
 
-def tensor_to_cpn(cpn, tensor):
+def tensor_to_mpcg(mpcg, tensor):
     all_lists = tensor.cpu().detach().tolist()
     mid = len(all_lists) // 2
 
     pulses = all_lists[:mid]
     capacity = all_lists[mid:]
     count = 0
-    for key in sorted(cpn.keys()):
+    for key in sorted(mpcg.keys()):
         if key >= 1.0 or key <= 0.0:
             continue
-        cpn[key][2] = pulses[count]
-        cpn[key][3] = capacity[count]
+        mpcg[key][2] = pulses[count]
+        mpcg[key][3] = capacity[count]
         count += 1
-    return cpn
+    return mpcg
 
 
-def sample_one(args, dataloader, model, cpn, device):
+def sample_one(args, dataloader, model, mpcg, device):
     PSNR = []
     SSIM = []
     MAE = []
@@ -275,7 +275,7 @@ def sample_one(args, dataloader, model, cpn, device):
             if args.input_channels == 3:
                 target_data = target_data.squeeze(1)
                 source_data = source_data.squeeze(1)
-            fake_sample = sample_by_cpn(args, cpn, model, source_data, device)
+            fake_sample = sample_by_mpcg(args, mpcg, model, source_data, device)
             psnr_list, ssim_list, mae_list = evaluate_samples(args, target_data, fake_sample)
             PSNR.extend(psnr_list)
             SSIM.extend(ssim_list)
@@ -283,36 +283,36 @@ def sample_one(args, dataloader, model, cpn, device):
     v = sum(PSNR) / len(PSNR) + 30 * sum(SSIM) / len(SSIM)
     return v
 
-class CPNACTrainer:
-    def __init__(self, args, cpn_dim=6, hidden_dim=256, z_dim=100, env_step=30000,
-                       cpn_lr=1e-4, cpn_lrf=1e-5, batch_size=16,
-                 cpn=None, model=None, dataloader=None, device=torch.device('cuda:0')):
+class MPCGACTrainer:
+    def __init__(self, args, mpcg_dim=6, hidden_dim=256, z_dim=100, env_step=30000,
+                       mpcg_lr=1e-4, mpcg_lrf=1e-5, batch_size=16,
+                 mpcg=None, model=None, dataloader=None, device=torch.device('cuda:0')):
         self.args = args
         self.device = device
-        self.cpn_dim = cpn_dim
+        self.mpcg_dim = mpcg_dim
         self.hidden_dim = hidden_dim
         self.dtype = torch.float64
         self.z_dim = z_dim
-        self.actor = Actor(state_dim=cpn_dim, hidden_dim=hidden_dim, z_dim=z_dim, dtype=self.dtype).to(self.device)
-        self.critic = Critic(state_dim=cpn_dim, hidden_dim=hidden_dim, z_dim=z_dim, dtype=self.dtype).to(self.device)
+        self.actor = Actor(state_dim=mpcg_dim, hidden_dim=hidden_dim, z_dim=z_dim, dtype=self.dtype).to(self.device)
+        self.critic = Critic(state_dim=mpcg_dim, hidden_dim=hidden_dim, z_dim=z_dim, dtype=self.dtype).to(self.device)
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=cpn_lr, betas=(self.args.beta1, self.args.beta2))
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=cpn_lr, betas=(self.args.beta1, self.args.beta2))
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=mpcg_lr, betas=(self.args.beta1, self.args.beta2))
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=mpcg_lr, betas=(self.args.beta1, self.args.beta2))
         self.env_steps = env_step
-        self.actor_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, self.env_steps, eta_min=cpn_lrf)
-        self.critic_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, self.env_steps, eta_min=cpn_lrf)
+        self.actor_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.actor_optimizer, self.env_steps, eta_min=mpcg_lrf)
+        self.critic_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.critic_optimizer, self.env_steps, eta_min=mpcg_lrf)
         self.lambda_reg = 0.1
         self.lambda_vm = 1
         self.batch_size = batch_size
-        self.cpn = cpn
+        self.mpcg = mpcg
         self.model = model
         self.dataloader = dataloader
         self.opt_state = None
-        self.opt_cpn = None
+        self.opt_mpcg = None
         self.opt_v = -1000.
         self.org_v = -1000.
         self.args.C = 60
-        self.searcher = CPNACSearcher(self.args, self.cpn, self.model, self.dataloader)
+        self.searcher = MPCGACSearcher(self.args, self.mpcg, self.model, self.dataloader)
         self.buffer = self.searcher.get_buffer()
 
         self.change_global_noise()
@@ -361,56 +361,56 @@ class CPNACTrainer:
             states = torch.stack(states)
             latent_z = torch.randn(self.z_dim, dtype=self.dtype, device=self.device)
             new_states = self.actor(states, latent_z)
-            cpn_test = tensor_to_cpn(self.cpn, new_states[0])
-            v = sample_one(self.args, self.dataloader, self.model, cpn_test, self.device)
-            return cpn_test, v, new_states[0]
+            mpcg_test = tensor_to_mpcg(self.mpcg, new_states[0])
+            v = sample_one(self.args, self.dataloader, self.model, mpcg_test, self.device)
+            return mpcg_test, v, new_states[0]
 
     def get_result(self):
-        cpn_test, v_test, _ = self.validate()
+        mpcg_test, v_test, _ = self.validate()
         print("Actor Opt V")
         print("=" * 50)
-        print("\033[92m" + str(cpn_test) + "\033[0m")
+        print("\033[92m" + str(mpcg_test) + "\033[0m")
         print("Actor Opt V: " + str(v_test))
         print("=" * 50 + "\n")
         print(" ")
         print("Truth Opt V")
         print("=" * 50)
-        print("\033[93m" + str(self.searcher.opt_cpn) + "\033[0m")
+        print("\033[93m" + str(self.searcher.opt_mpcg) + "\033[0m")
         print("Truth Opt V: " + str(self.searcher.opt_v))
         print("=" * 50 + "\n")
-        return cpn_test, v_test, self.searcher.opt_cpn, self.opt_v
+        return mpcg_test, v_test, self.searcher.opt_mpcg, self.opt_v
 
-    def init_cpn(self):
-        if self.args.cpn_init_search:
-            self.opt_cpn = self.searcher.ternary_search_init_cpn(search_round=1)
+    def init_mpcg(self):
+        if self.args.mpcg_init_search:
+            self.opt_mpcg = self.searcher.ternary_search_init_mpcg(search_round=1)
         else:
             self.searcher.prepare_data()
         self.searcher.start_synchronize_load_data_in_background(data_size=12000)
 
     def train(self):
-        self.init_cpn()
+        self.init_mpcg()
 
-        for step in tqdm(range(self.env_steps), desc="Training CPN", ncols=100):
+        for step in tqdm(range(self.env_steps), desc="Training MPCG", ncols=100):
             a_loss, c_loss = self.update_networks()
 
-            if step % int(self.args.cpn_log_time / 5) == 0 and step != 0:
-                time.sleep(self.args.cpn_sleep_time)
+            if step % int(self.args.mpcg_log_time / 5) == 0 and step != 0:
+                time.sleep(self.args.mpcg_sleep_time)
 
-            if step % self.args.cpn_log_time == 0 and step != 0:
-                cpn_test, v_test, cpn_tensor_test = self.validate()
+            if step % self.args.mpcg_log_time == 0 and step != 0:
+                mpcg_test, v_test, mpcg_tensor_test = self.validate()
 
                 if v_test > self.searcher.opt_v:
-                    self.searcher.buffer.push(cpn_tensor_test, v_test)
+                    self.searcher.buffer.push(mpcg_tensor_test, v_test)
 
-                cpn_test = '\n'.join([f'{key}: {value}' for key, value in cpn_test.items()])
+                mpcg_test = '\n'.join([f'{key}: {value}' for key, value in mpcg_test.items()])
                 tqdm.write(f"\n{'-' * 50}\n"
                            f"Step: {step}\n"
                            f"Actor Loss: {a_loss:.4f} | Critic Loss: {c_loss:.4f}\n"
                            f"Org V: {self.searcher.org_v:.4f} | Truth Opt V: {self.searcher.opt_v:.4f} | Actor Opt V: {v_test:.4f}\n"
                            f"Buffer Size: {self.searcher.buffer.size()}\n"
                            f"{'-' * 50}\n"
-                           f"Actor Opt CPN:"
-                           f"{str(cpn_test)}\n")
+                           f"Actor Opt MPCG:"
+                           f"{str(mpcg_test)}\n")
                 self.change_global_noise()
 
 
