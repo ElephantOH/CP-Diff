@@ -91,7 +91,7 @@ def topological_sort(graph):
             dfs(node)
     return stack
 
-def get_cell_inputs(cell_input, cpn_result, source, device):
+def get_cell_inputs(cell_input, mpcg_result, source, device):
     inputs_x0 = []
     inputs_xt = []
     xt_noise = torch.randn_like(source).to(device)
@@ -104,7 +104,7 @@ def get_cell_inputs(cell_input, cpn_result, source, device):
             inputs_x0.append(source)
             inputs_xt.append(xt_noise)
         else:
-            inputs_group = cpn_result.get(input_id)
+            inputs_group = mpcg_result.get(input_id)
             if inputs_group is None:
                 inputs_x0.append(source)
                 inputs_xt.append(xt_noise)
@@ -134,15 +134,15 @@ def get_cell_pulses(x_0, x_t, intensity, capacity, pulses_type, device):
            + extract(coeff2, x_0.shape, device) * x_t)
     return h_t
 
-def sample_by_cpn(cpn, model, source, device):
-    sample_sequence = topological_sort(cpn)
-    cpn_result = {key: None for key in cpn}
+def sample_by_mpcg(mpcg, model, source, device):
+    sample_sequence = topological_sort(mpcg)
+    mpcg_result = {key: None for key in mpcg}
     with torch.no_grad():
-        for cpn_id in sample_sequence:
-            cell_info = cpn[cpn_id] # id : [time_layer, [input_ids], intensity, capacity]
-            input_x0, input_xt = get_cell_inputs(cell_info[1], cpn_result, source, device)
-            if cpn_id == 0.0:
-                cpn_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
+        for mpcg_id in sample_sequence:
+            cell_info = mpcg[mpcg_id] # id : [time_layer, [input_ids], intensity, capacity]
+            input_x0, input_xt = get_cell_inputs(cell_info[1], mpcg_result, source, device)
+            if mpcg_id == 0.0:
+                mpcg_result[0.0] = [get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device), input_xt]
                 return input_x0
             module_time = torch.full((input_x0.size(0),), cell_info[0] * args.cell_time_mult, dtype=torch.int64).to(device)
             cell_latent = torch.randn(input_x0.size(0), args.z_emb_dim, device=device)
@@ -151,8 +151,8 @@ def sample_by_cpn(cpn, model, source, device):
             h_t = get_cell_pulses(input_x0, input_xt, cell_info[2], cell_info[3], args.pulses_type, device)
             output_x0, _ = model(torch.cat((h_t, source),axis=1), module_time, cell_latent)
             output_xt = h_t
-            cpn_result[cpn_id] = [output_x0, output_xt]
-    result = cpn_result.get(0.0)
+            mpcg_result[mpcg_id] = [output_x0, output_xt]
+    result = mpcg_result.get(0.0)
     if result is None:
         assert "[Error]: The result is None. "
     return result[0]
@@ -201,9 +201,9 @@ def process_and_save_unaligned_image(source, target, fake_source, fake_target, i
         fake_sample = Image.fromarray(fake_sample)
         fake_sample.save(os.path.join(checkpoint_path, f'ITER({str(epoch).zfill(4)}).png'))
 
-def print_cpn(cpn):
-    cpn = "{" + ',\n'.join([f'{key}: {value}' for key, value in cpn.items()]) + "}"
-    print("\033[93m" + str(cpn) + "\033[0m")
+def print_mpcg(mpcg):
+    mpcg = "{" + ',\n'.join([f'{key}: {value}' for key, value in mpcg.items()]) + "}"
+    print("\033[93m" + str(mpcg) + "\033[0m")
 
 
 #%% MAIN FUNCTION
@@ -211,7 +211,7 @@ def sample_and_test(args):
     torch.manual_seed(42)
     torch.cuda.set_device(args.gpu_chose)
     device = torch.device('cuda:{}'.format(args.gpu_chose))
-    args.phase = "test_cpn"
+    args.phase = "test_mpcg"
     args.sample_fixed = False
     test_dataset = GetDataset("test", args.input_path, args.source, args.target, dim=args.input_channels, normed=args.normed)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
@@ -221,13 +221,13 @@ def sample_and_test(args):
     elif args.use_model_name == "EDDM":
         model = NCSNpp(args).to(device)
 
-    cpn_name = "cpn_" + args.cpn_name
-    cpn = getattr(args, cpn_name)
+    mpcg_name = "mpcg_" + args.mpcg_name
+    mpcg = getattr(args, mpcg_name)
 
     args.use_model_name = "DFM"
     checkpoint_file = args.checkpoint_path + "/{}_{}.pth"
     load_checkpoint(checkpoint_file, model, '{}_{}'.format(args.network_type, args.use_model_name), epoch=str(args.which_epoch), device=device)
-    save_dir = args.checkpoint_path + "/generated_samples/cpn({})".format(args.which_epoch)
+    save_dir = args.checkpoint_path + "/generated_samples/mpcg({})".format(args.which_epoch)
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -237,7 +237,7 @@ def sample_and_test(args):
     MAE = []
     image_iteration = 0
 
-    print_cpn(cpn)
+    print_mpcg(mpcg)
 
     progress_bar = tqdm(enumerate(test_dataloader), total=len(test_dataloader), desc="Testing", colour='green')
     for iteration, (source_data, target_data, _, _) in progress_bar:
@@ -246,7 +246,7 @@ def sample_and_test(args):
         if args.input_channels == 3:
             target_data = target_data.squeeze(1)
             source_data = source_data.squeeze(1)
-        fake_sample = sample_by_cpn(cpn, model, source_data, device)
+        fake_sample = sample_by_mpcg(mpcg, model, source_data, device)
         psnr_list, ssim_list, mae_list = evaluate_samples(target_data, fake_sample)
         PSNR.extend(psnr_list)
         SSIM.extend(ssim_list)
