@@ -1,4 +1,4 @@
-name: cpn
+name: mpcg
 channels:
   - anaconda
   - conda-forge
