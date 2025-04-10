@@ -313,11 +313,11 @@ def train_cpn(args):
     checkpoint_file = args.checkpoint_path + "/{}_{}.pth"
     load_checkpoint(checkpoint_file, model, '{}_{}'.format(args.network_type, args.use_model_name), epoch=str(args.which_epoch), device=device)
 
-    # get_nr(cpn_dataloader, model, 50, device)
+    # get_nr(cpn_dataloader, model, 500, device)
     # exit(0)
     # get_ablation_on_cpn_framework(cpn_dataloader, model, cpn)
     # exit(0)
-    # get_photo(cpn_dataloader, model, 100, device)
+    # get_photo(cpn_dataloader, model, 1000, device)
     # exit(0)
     #######################################################
     from backbones.cpn_actor_critic import CPNACTrainer
