@@ -1,7 +1,7 @@
 <hr>
 <h1 align="center">
   CPN-Diff <br>
-  <sub>Cell-Pulse Network Diffusion Model with Schedule-Free Sampling for Noise-Robust Modality Translation</sub>
+  <sub>Dual-Flow Diffusion Model with Schedule-Free Cell-Pulse Network for Noise-Robust Modality Translation</sub>
 </h1>
 <div align="center">
  Anonymous Authors
