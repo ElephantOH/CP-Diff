@@ -320,9 +320,9 @@ def train_mpcg(args):
     # get_photo(mpcg_dataloader, model, 1000, device)
     # exit(0)
     #######################################################
-    from backbones.mpcg_actor_critic import mpcgACTrainer
+    from backbones.mpcg_actor_critic import MPCGACTrainer
     mpcg_dim, hidden_dim = get_mpcg_dim(mpcg)
-    mpcgac = mpcgACTrainer(args, mpcg_dim=mpcg_dim, hidden_dim=hidden_dim, env_step=args.mpcg_env_step,
+    mpcgac = MPCGACTrainer(args, mpcg_dim=mpcg_dim, hidden_dim=hidden_dim, env_step=args.mpcg_env_step,
                          mpcg=mpcg, model=model, dataloader=mpcg_dataloader, device=device,
                          mpcg_lr=1e-4, mpcg_lrf=1e-5, batch_size=args.mpcg_batch_size)
     mpcgac.train()
