@@ -23,7 +23,7 @@ def _list_image_paths_recursively(data_dir, shuffle = False):
     return results
 
 
-class CPNDataset(Dataset):
+class CPDataset(Dataset):
     def __init__(self, source_data, target_data, dim, normed, image_size=(256, 256)):
         self.source_data = source_data
         self.target_data = target_data
@@ -104,5 +104,5 @@ def GetDataset(phase = "test", input_path = "/dataset", contrast1 = 'T1', contra
     source_data = _list_image_paths_recursively(source_path, shuffle)
     target_data = _list_image_paths_recursively(target_path, shuffle)
 
-    dataset = CPNDataset(source_data, target_data, dim, normed)
+    dataset = CPDataset(source_data, target_data, dim, normed)
     return dataset
