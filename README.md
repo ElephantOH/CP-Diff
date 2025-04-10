@@ -1,7 +1,7 @@
 <hr>
 <h1 align="center">
-  CPN-Diff <br>
-  <sub>Dual-Flow Diffusion Model with Schedule-Free Cell-Pulse Network for Noise-Robust Modality Translation</sub>
+  CP-Diff <br>
+  <sub>Cell-Pulse Diffusion Model with Multi-Path Correction and Schedule-Free Inference for Noise-Robust Modality Translation</sub>
 </h1>
 <div align="center">
  Anonymous Authors
@@ -13,7 +13,7 @@
 <hr>
 
 
-Official PyTorch implementation of **CPN-Diff**. Experiments demonstrate that our method performs effectively across two medical datasets and two thermal infrared visible light facial datasets.
+Official PyTorch implementation of **CP-Diff**. Experiments demonstrate that our method performs effectively across two medical datasets and two thermal infrared visible light facial datasets.
 
 <p align="center">
   <img src="figures/frame.png" alt="frame" style="width: 1200px; height: auto;">
@@ -25,7 +25,7 @@ This repository has been developed and tested with `CUDA 11.7` and `Python 3.8`.
 
 ```
 conda env create --file requirements.yaml
-conda activate cpn
+conda activate cp
 ```
 
 ## 🐼 Prepare dataset
@@ -70,7 +70,7 @@ python train_Model.py \
   --max_epoch 120 \
   --lr 1.5e-4 \
   --input_path ./datasets/BrainTs20 \
-  --checkpoint_path ./checkpoints/brats_1to2_CPN_logs
+  --checkpoint_path ./checkpoints/brats_1to2_MPCG_logs
 ```
 
 ### Argument descriptions
@@ -85,14 +85,14 @@ python train_Model.py \
 | `--input_path`            | Data set directory.                                                                                   |
 | `--checkpoint_path`       | Model checkpoint path to resume training.                                                             |
 
-## 🐧 Training CPN
+## 🐧 Training MPCG
 
-Run the following command to start training CPN.
+Run the following command to start training MPCG.
 The predicted images are saved under `/checkpoints/$LOG/generated_samples` directory.
 By default, the script runs on a `single GPU`. 
 
 ```
-python train_CPN.py \
+python train_MPCG.py \
   --input_channels 1 \
   --source T1 \
   --target T2 \
@@ -100,17 +100,17 @@ python train_CPN.py \
   --which_epoch 120 \
   --gpu_chose 0 \
   --input_path ./datasets/BrainTs20 \
-  --checkpoint_path ./checkpoints/brats_1to2_CPN_logs
+  --checkpoint_path ./checkpoints/brats_1to2_MPCG_logs
 ```
 
-## 🐣 Testing CPN
+## 🐣 Testing MPCG
 
 Run the following command to start testing.
 The predicted images are saved under `/checkpoints/$LOG/generated_samples` directory.
 By default, the script runs on a `single GPU`. 
 
 ```
-python test_CPN.py \
+python test_MPCG.py \
         --input_channels 1 \
         --source T1 \
         --target T2 \
@@ -118,7 +118,7 @@ python test_CPN.py \
         --which_epoch 120 \
         --gpu_chose 0 \
         --input_path ./datasets/BrainTs20 \
-        --checkpoint_path ./checkpoints/brats_1to2_CPN_logs
+        --checkpoint_path ./checkpoints/brats_1to2_MPCG_logs
 ```
 
 ### Argument descriptions
@@ -139,7 +139,7 @@ The paper is currently undergoing blind review.
 
 ## 🦊 Code
 
-The code for the `test_CPN`, `train_Model` and `train_CPN` are open.
+The code for the `test_MPCG`, `train_Model` and `train_MPCG` are open.
 
 ## 🐭 Citation
 
